@@ -1,0 +1,324 @@
+<html>
+    <head>
+        <script type="text/javascript" src="js/dixithelperconst.js"></script>
+        <meta charset="UTF-8">
+        <script type="text/javascript">
+
+        var imageData;
+        var width;
+        var height;
+        var points = [[120,650, 1.5], [700,400, 1], [290,250, 1.4], [800, 200, 1], [500,500,-1], [360,370,-1], [500,80, -0.3]];
+        //var points = [[120,650, 1.5], [700,400, 1], [290,250, 1.4], [800, 200, 1], [500,500,-1], [340,400,-1], [500,20, -0.3]];
+        var pcol = false;
+        const UP=1,RIGHT=2,DOWN=3,LEFT=4;
+
+        function distance(x1,y1,x2,y2) {
+            return Math.sqrt((x1-x2)*(x1-x2) + (y1-y2)*(y1-y2));
+        }
+
+        function calcSumDist(x,y) {
+            let dist = 0;
+            let d;
+            pcol=false;
+            points.forEach( function(item) {
+                d = distance(x,y,item[0],item[1]);
+                if (d<5) {
+                    pcol=true;
+                }
+                dist += d*item[2];
+            });
+            return dist;
+        }
+
+        function setPixel(x, y, p) {
+            index = (x + y * imageData.width) * 4;
+            imageData.data[index+0] = p.R;
+            imageData.data[index+1] = p.G;
+            imageData.data[index+2] = p.B;
+            imageData.data[index+3] = p.A;
+        }
+
+        function lightAdjust(p, adjust) {
+            p.R = Math.min((Math.floor(p.R*adjust)), 256),0;
+            p.G = Math.min((Math.floor(p.G*adjust)), 256),0;
+            p.B = Math.min((Math.floor(p.B*adjust)), 256),0;
+            return p;
+        }
+
+        function lightPlus(p, plus) {
+            p.R = Math.min(p.R+plus, 256),0;
+            p.G = Math.min(p.G+plus, 256),0;
+            p.B = Math.min(p.B+plus, 256),0;
+            return p;
+        }
+
+        function calcImage() {
+            let dist;
+            let black = pixel(0,0,0,255);
+            let white = pixel(255,200,255,255);
+            let red = pixel(255,0, 0,255);
+            for(let x=0;x<width;x++) {
+                for(let y=0;y<height;y++) {
+                    dist = calcSumDist(x,y);
+                    if (pcol) {
+                        setPixel(x,y,red);
+                        continue;
+                    }
+
+                    if (dist>1250) {
+                        white.G = Math.round(Math.sin(dist/3)*200) % 256;
+                        white.R = (Math.round(dist/200) % 256); // / 1.7;
+                        white.B = Math.round(dist/200) % 256;
+                        white = lightPlus(white, 100);
+                        white.G = 160;
+                        white.R = 160;
+                        white.B = 160;
+                        //white = lightAdjust(white,1.3);
+                        setPixel(x,y,white);
+                    }
+
+                    /*if (Math.round(dist/15) % 2 ==1) {
+                        setPixel(x,y,black);
+                    } else {
+                        setPixel(x,y,white);
+                    }*/
+                }
+            }
+        }
+
+        function pixel(r,g,b,a) {
+            var p = new Object();
+            p.R = r;
+            p.G = g;
+            p.B = b;
+            p.A = a;
+            return p;
+        }
+
+        var lGrid = [];
+        var gLevel, gc;
+
+        function findP(p1, p2) {
+            if (Math.abs(p1.x-p2.x)+Math.abs(p1.y-p2.y)<1) {
+                return p1;
+            }
+
+            let p3 = new Object();
+            p3.x = ((p1.x+p2.x)/2);
+            p3.y=((p1.y+p2.y)/2);
+            p3.v=calcSumDist(p3.x,p3.y);
+            if (p1.v>gLevel) {
+                if (p3.v<gLevel) {
+                    return findP(p1, p3);
+                } else {
+                    return findP(p2, p3);
+                }
+            } else {
+                if (p3.v>gLevel) {
+                    return findP(p1, p3);
+                } else {
+                    return findP(p2, p3);
+                }
+            }
+        }
+
+        function getSquares(p1, p2) {
+            let p3;
+            if (p1.x>p2.x || p1.y>p2.y) {
+                p3 = p1;
+                p1 = p2;
+                p2 = p3;
+            }
+            if (p1.x<p2.x) {
+                return [{x:p1.x, y:p1.y-1}, {x:p1.x,y:p1.y}];
+            } else {
+                return [{x:p1.x-1, y:p1.y}, {x:p1.x,y:p1.y}];
+            }
+        }
+
+        function sameSquares(sq1, sq2) {
+            return (sq1[0].x==sq2[0].x && sq1[0].y==sq2[0].y &&
+                sq1[1].x==sq2[1].x && sq1[1].y==sq2[1].y);
+        }
+
+        function otherSides(a,b) {
+            return (a>gLevel && b<=gLevel) || (a<=gLevel && b>gLevel);
+        }
+
+        function drawCircle(x,y,r) {
+            gc.beginPath();
+            gc.arc(x, y, r, 0, 2*Math.PI);
+            gc.stroke();
+        }
+
+        function findD(p1, p2, grid) {
+            let v1=calcSumDist(p1.x*grid, p1.y*grid);
+            let v2=calcSumDist(p2.x*grid, p2.y*grid);
+            let startP = findP({x:p1.x*grid, y:p1.y*grid, v:v1}, {x:p2.x*grid, y:p2.y*grid, v:v2});
+            startP.p1=p1;
+            startP.p2=p2;
+            startP.side=UP;
+            let squares=getSquares(p1,p2);
+            startP.squares=squares;
+            startP.squareFrom=0;
+            let dots=[];
+            let num =0;
+            dots.push(startP);
+            while (num<3000 && (dots.length==1 || !sameSquares(dots[0].squares, dots[dots.length-1].squares))) {
+                let dot=dots[dots.length-1];
+                let sq = dot.squares[(dot.squareFrom==0 ? 1 : 0)];
+                let UL = calcSumDist(sq.x*grid, sq.y*grid);
+                let UR = calcSumDist((sq.x+1)*grid, sq.y*grid);
+                let DL = calcSumDist(sq.x*grid, (sq.y+1)*grid);
+                let DR = calcSumDist((sq.x+1)*grid, (sq.y+1)*grid);
+                let next = new Object();
+                if (dot.side!=UP && otherSides(UL,UR)) {
+                    next = findP({x:sq.x*grid, y:sq.y*grid, v:UL}, {x:(sq.x+1)*grid, y:sq.y*grid, v:UR});
+                    next.p1={x:sq.x,y:sq.y};
+                    next.p2={x:sq.x+1,y:sq.y};
+                    next.side=DOWN;
+                    next.squares=getSquares(next.p1, next.p2);
+                    next.squareFrom=1;
+                    console.log("UP");
+                } else if (dot.side!=LEFT && otherSides(UL,DL)) {
+                    next = findP({x:sq.x*grid, y:sq.y*grid, v:UL}, {x:sq.x*grid, y:(sq.y+1)*grid, v:DL});
+                    next.p1={x:sq.x,y:sq.y};
+                    next.p2={x:sq.x,y:sq.y+1};
+                    next.side=RIGHT;
+                    next.squares=getSquares(next.p1, next.p2);
+                    next.squareFrom=1;
+                    console.log("LEFT");
+                } else if (dot.side!=DOWN && otherSides(DR,DL)) {
+                    next = findP({x:sq.x*grid, y:(sq.y+1)*grid, v:DL}, {x:(sq.x+1)*grid, y:(sq.y+1)*grid, v:DR});
+                    next.p1={x:sq.x,y:sq.y+1};
+                    next.p2={x:sq.x+1,y:sq.y+1};
+                    next.side=UP;
+                    next.squares=getSquares(next.p1, next.p2);
+                    next.squareFrom=0;
+                    console.log("DOWN");
+                } else if (dot.side!=RIGHT && otherSides(DR,UR)) {
+                    next = findP({x:(sq.x+1)*grid, y:sq.y*grid, v:UR}, {x:(sq.x+1)*grid, y:(sq.y+1)*grid, v:DR});
+                    next.p1={x:sq.x+1,y:sq.y};
+                    next.p2={x:sq.x+1,y:sq.y+1};
+                    next.side=LEFT;
+                    next.squares=getSquares(next.p1, next.p2);
+                    next.squareFrom=0;
+                    console.log("RIGHT");
+                }
+                console.log("--- :" + num);
+                console.log(next);
+                dots.push(next);
+                //drawCircle(next.x, next.y, 4);
+                num++;
+            }
+            return dots;
+        }
+
+
+
+        function levelLine(c, level, grid) {
+            gc = c;
+            let x = 0;
+            let xi = 0;
+            let y = 0;
+            let yi = 0;
+            lGrid= [];
+            console.log("width:" + width + ", height:" + height);
+            let x1 = -1;
+            let x2 = -1;
+            let y1 = -1;
+            let y2 = -1;
+            let d1 = 10000;
+            let d2 = 10000;
+            gLevel =level;
+            while (y<height) {
+                x = 0;
+                xi = 0;
+                lGrid.push([]);
+                //lGrid[yi]=[];
+
+                while (x<width) {
+                    let d = calcSumDist(x,y);
+                    lGrid[lGrid.length-1].push(d);
+                    c.beginPath();
+                    c.rect(x-2, y-2, 5,5);
+                    if (d>level) {
+                        c.fillStyle="yellow";
+                    } else {
+                        c.fillStyle="black";
+                    }
+                    //c.fill();
+
+                    if (x1==-1) {
+                        if (d<level && d1>=level) {
+                            x1 = xi-1;
+                            y1 = yi;
+                            x2 = xi;
+                            y2 = yi;
+                            //drawCircle(x1*grid, y1*grid, 8);
+                            //drawCircle(x2*grid, y2*grid, 8);
+                        }
+                    }
+                    x += grid;
+                    xi++
+                }
+                y += grid;
+                yi++;
+            }
+
+            let dots;
+            if (x1>-1) {
+                dots = findD({x:x1,y:y1}, {x:x2,y:y2}, grid);
+                point = dots[0];
+                //drawCircle(point.x, point.y, 5);
+                console.log(point);
+            }
+            return dots;
+            //console.dir( lGrid );
+
+
+        }
+
+        function drawOutLine(dots) {
+            gc.beginPath();
+            gc.moveTo(dots[0].x, dots[0].y);
+            gc.strokeStyle="#10AF"+(Math.round(points[4][1]/5) %256).toString(16);
+            for(let i=1;i<dots.length;i++) {
+                gc.lineTo(dots[i].x, dots[i].y);
+            }
+            gc.lineTo(dots[0].x, dots[0].y);
+            gc.stroke();
+        }
+
+
+        function drawIt() {
+            let element = document.getElementById("canv");
+            let c = element.getContext("2d");
+
+            // read the width and height of the canvas
+            width = element.width;
+            height = element.height;
+
+            // create a new pixel array
+            imageData = c.createImageData(width, height);
+            //calcImage();
+
+            c.putImageData(imageData, 0, 0);
+            c.beginPath();
+            c.rect(0,0,2000,1200);
+            c.fillStyle="#000";
+            c.fill();
+
+            for(let i=100;i<1000;i+=10) {
+                points[4][1] = i;
+                let dots = levelLine(c, 1240, 10);
+                drawOutLine(dots);
+            }
+            console.log("ok " + distance(10,10,20,20) + " - " + (Math.round(14.3) % 2));
+        }
+        </script>
+    </head>
+    <body onload="drawIt();">
+        <canvas width="2000" height="1000" id="canv"></canvas>
+    </body>
+</html>
